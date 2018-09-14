@@ -30,6 +30,7 @@
 #include <sensor_msgs/image_encodings.h>
 #include <sensor_msgs/point_cloud2_iterator.h>
 #include <stereo_msgs/DisparityImage.h>
+#include <pcl_ros/point_cloud.h>
 
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
@@ -144,6 +145,26 @@ namespace zed_wrapper {
         nhNs.param<bool>("publish_tf", publishTf, true);
 
         nhNs.param<bool>("camera_flip", cameraFlip, false);
+
+        nhNs.getParam("enable_spatial_mapping", enableSpatialMapping);
+
+        // Configure Spatial Mapping and filtering parameters
+        sl::SpatialMappingParameters spatial_mapping_param;
+        if (enableSpatialMapping) {
+           int sp_range_meter = 2;
+           int sp_resolution_meter = 2;
+           spatial_mapping_param.save_texture = false;
+           spatial_mapping_param.max_memory_usage = 512;
+           spatial_mapping_param.use_chunk_only = 1;
+           nhNs.getParam("sp_range_meter", sp_range_meter);
+           spatial_mapping_param.range_meter = sl::SpatialMappingParameters::get(static_cast<sl::SpatialMappingParameters::MAPPING_RANGE>(sp_range_meter));
+           nhNs.getParam("sp_resolution_meter", sp_resolution_meter);
+           spatial_mapping_param.resolution_meter = sl::SpatialMappingParameters::get(static_cast<sl::SpatialMappingParameters::MAPPING_RESOLUTION>(sp_resolution_meter));
+           nhNs.getParam("sp_max_memory_usage", spatial_mapping_param.max_memory_usage);
+           nhNs.getParam("sp_use_chunk_only", spatial_mapping_param.use_chunk_only);
+           nhNs.getParam("sp_mesh_filepath", mesh_filepath);
+           filter_param.set(sl::MeshFilterParameters::MESH_FILTER_LOW);
+        }
 
         if (serial_number > 0) {
             NODELET_INFO_STREAM("SN : " << serial_number);
@@ -450,7 +471,8 @@ namespace zed_wrapper {
         // PointCloud publisher
         pubCloud = nh.advertise<sensor_msgs::PointCloud2>(point_cloud_topic, 1);
         NODELET_INFO_STREAM("Advertized on topic " << point_cloud_topic);
-
+        pubCloud_merged = nh.advertise<sensor_msgs::PointCloud2> ("point_cloud_merged", 1);
+        NODELET_INFO_STREAM("Advertized on topic " << "point_cloud_merged");
         // Camera info publishers
         pubRgbCamInfo = nh.advertise<sensor_msgs::CameraInfo>(rgb_cam_info_topic, 1); // rgb
         NODELET_INFO_STREAM("Advertized on topic " << rgb_cam_info_topic);
@@ -505,6 +527,13 @@ namespace zed_wrapper {
         // Start pool thread
         devicePollThread = std::thread(&ZEDWrapperNodelet::device_poll, this);
 
+        while (enableSpatialMapping &&
+              zed.enableSpatialMapping(spatial_mapping_param) != sl::SUCCESS)
+        {
+           NODELET_INFO_STREAM("Wait until spatial mapping is ready to start...");
+           std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        NODELET_INFO_STREAM("Initialization is done.");
 
     }
 
@@ -1312,6 +1341,13 @@ namespace zed_wrapper {
 
         sl::Mat leftZEDMat, rightZEDMat, depthZEDMat, disparityZEDMat, confImgZEDMat,
         confMapZEDMat;
+
+        pcl::PointCloud<pcl::PointXYZRGB> point_cloud;
+        point_cloud.width = matWidth;
+        point_cloud.height = matHeight;
+        int size = matWidth*matHeight;
+        point_cloud.points.resize(size);
+
         // Main loop
         while (nhNs.ok()) {
             // Check for subscribers
@@ -1684,6 +1720,42 @@ namespace zed_wrapper {
                     imuTime = t;
                 }
 
+                if (enableSpatialMapping) {
+                    if ((t - last_sm_t).toSec() > 0.5) {
+                        zed.requestMeshAsync();
+                        last_sm_t = t;
+                    }
+
+                    if (zed.getMeshRequestStatusAsync() == sl::SUCCESS) {
+                        if (zed.retrieveMeshAsync(mesh) == sl::SUCCESS) {
+                            int lv = 0;
+                            for (int c = 0; c < mesh.chunks.size(); ++c) {
+                                for (int v = 0; v < mesh.chunks[c].vertices.size(); ++v) {
+                                    point_cloud.points[v + lv].x = mesh.chunks[c].vertices[v][2];
+                                    point_cloud.points[v + lv].y = -mesh.chunks[c].vertices[v][0];
+                                    point_cloud.points[v + lv].z = -mesh.chunks[c].vertices[v][1];
+                                    point_cloud.points[v + lv].r = 255;
+                                    point_cloud.points[v + lv].g = 255;
+                                    point_cloud.points[v + lv].b = 255;
+
+                                }
+
+                                lv += mesh.chunks[c].vertices.size();
+                            }
+
+                            sensor_msgs::PointCloud2 output;
+                            pcl::toROSMsg(point_cloud, output); // Convert the point cloud to a ROS message
+                            output.header.frame_id = odometryFrameId; // Set the header values of the ROS message
+                            output.header.stamp = pointCloudTime;
+                            output.height = matHeight;
+                            output.width = matWidth;
+                            output.is_bigendian = false;
+                            output.is_dense = false;
+                            pubCloud_merged.publish(output);
+                        }
+                    }
+                }
+
                 static int rateWarnCount = 0;
                 if (!loop_rate.sleep()) {
                     rateWarnCount++;
@@ -1722,6 +1794,18 @@ namespace zed_wrapper {
             }
         } // while loop
 
+        if (enableSpatialMapping) {
+            if (!mesh_filepath.empty()) {
+                std::cout << "extract whole mesh to " << mesh_filepath << std::endl;
+                zed.extractWholeMesh(mesh);
+                mesh.filter(filter_param);
+                mesh.save((mesh_filepath + "/zed_mesh.obj").c_str());
+            }
+
+            zed.disableSpatialMapping();
+        }
+
+        zed.disableTracking();
         mStopNode = true; // Stops other threads
         zed.close();
 

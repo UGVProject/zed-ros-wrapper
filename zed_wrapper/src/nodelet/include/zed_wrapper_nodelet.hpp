@@ -344,6 +344,7 @@ namespace zed_wrapper {
         bool triggerAutoExposure;
         bool computeDepth;
         bool grabbing = false;
+        bool enableSpatialMapping = false;
         int openniDepthMode = 0; // 16 bit UC data in mm else 32F in m, for more info http://www.ros.org/reps/rep-0118.html
 
         // Frame and Mat
@@ -361,6 +362,7 @@ namespace zed_wrapper {
         // Point cloud variables
         sl::Mat cloud;
         sensor_msgs::PointCloud2 mPointcloudMsg;
+        sensor_msgs::PointCloud2 mPointcloud_merged_Msg;
         string pointCloudFrameId = "";
         ros::Time pointCloudTime;
 
