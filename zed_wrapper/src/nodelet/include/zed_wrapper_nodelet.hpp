@@ -59,7 +59,7 @@ namespace zed_wrapper {
 
         /* \brief \ref ZEDWrapperNodelet destructor
          */
-        virtual ~ZEDWrapperNodelet();
+        ~ZEDWrapperNodelet() override;
 
         /* \brief Image to ros message conversion
          * \param img : the image to publish
@@ -70,9 +70,12 @@ namespace zed_wrapper {
         static sensor_msgs::ImagePtr imageToROSmsg(sl::Mat img, std::string frameId, ros::Time t);
 
       private:
+        /* \Output the type of cv::Mat
+        */
+        std::string type2str(int type);
         /* \brief Initialization function called by the Nodelet base class
          */
-        virtual void onInit();
+        void onInit() override;
 
         /* \brief ZED camera polling thread function
          */
@@ -230,6 +233,7 @@ namespace zed_wrapper {
         ros::Publisher pubConfMap;
         ros::Publisher pubDisparity;
         ros::Publisher pubCloud;
+        ros::Publisher pubCloud_merged;
         ros::Publisher pubRgbCamInfo;
         ros::Publisher pubLeftCamInfo;
         ros::Publisher pubRightCamInfo;
@@ -237,7 +241,8 @@ namespace zed_wrapper {
         ros::Publisher pubLeftCamInfoRaw;
         ros::Publisher pubRightCamInfoRaw;
         ros::Publisher pubDepthCamInfo;
-        ros::Publisher pubPose;
+        ros::Publisher pubPose;         // publish pose odom to map
+        ros::Publisher pubPose_cam;     // publish pose base to map
         ros::Publisher pubOdom;
         ros::Publisher pubImu;
         ros::Publisher pubImuRaw;
@@ -302,6 +307,7 @@ namespace zed_wrapper {
         int depthStabilization;
         std::string odometryDb;
         std::string svoFilepath;
+        std::string mesh_filepath;
         double imuPubRate;
         bool verbose;
 
@@ -321,6 +327,9 @@ namespace zed_wrapper {
 
         // zed object
         sl::InitParameters param;
+        sl::MeshFilterParameters filter_param;
+        sl::TRACKING_STATE tracking_state;
+        sl::Mesh mesh;
         sl::Camera zed;
         unsigned int serial_number;
         int userCamModel; // Camera model set by ROS Param

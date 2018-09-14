@@ -57,7 +57,7 @@ namespace zed_wrapper {
         }
     }
 
-    void ZEDWrapperNodelet::onInit() {
+   void ZEDWrapperNodelet::onInit() {
 
         mStopNode = false;
         mPcDataReady = false;
@@ -205,6 +205,7 @@ namespace zed_wrapper {
         string conf_map_topic = "confidence/confidence_map";
 
         string pose_topic = "map";
+        string pose_cam_topic = "cam/pose";
         string odometry_topic = "odom";
         string imu_topic = "imu/data";
         string imu_topic_raw = "imu/data_raw";
@@ -235,6 +236,7 @@ namespace zed_wrapper {
         nhNs.getParam("point_cloud_topic", point_cloud_topic);
 
         nhNs.getParam("pose_topic", pose_topic);
+        nhNs.getParam("cam_pose_topic", pose_cam_topic);
         nhNs.getParam("odometry_topic", odometry_topic);
 
         nhNs.getParam("imu_topic", imu_topic);
@@ -467,8 +469,10 @@ namespace zed_wrapper {
         NODELET_INFO_STREAM("Advertized on topic " << right_cam_info_raw_topic);
 
         // Odometry and Map publisher
-        pubPose = nh.advertise<geometry_msgs::PoseStamped>(pose_topic, 1);
-        NODELET_INFO_STREAM("Advertized on topic " << pose_topic);
+//        pubPose = nh.advertise<geometry_msgs::PoseStamped>(pose_topic, 1);
+//        NODELET_INFO_STREAM("Advertized on topic " << pose_topic);
+        pubPose_cam = nh.advertise<geometry_msgs::PoseStamped>(pose_cam_topic, 1);
+        NODELET_INFO_STREAM("Advertized on topic " << pose_cam_topic);
         pubOdom = nh.advertise<nav_msgs::Odometry>(odometry_topic, 1);
         NODELET_INFO_STREAM("Advertized on topic " << odometry_topic);
 
@@ -845,7 +849,7 @@ namespace zed_wrapper {
         pose.pose.orientation.z = base2.rotation.z;
         pose.pose.orientation.w = base2.rotation.w;
         // Publish odometry message
-        pubPose.publish(pose);
+        pubPose_cam.publish(pose);
     }
 
     void ZEDWrapperNodelet::publishPoseFrame(tf2::Transform baseTransform,
@@ -1279,6 +1283,8 @@ namespace zed_wrapper {
 
         ros::Time old_t =
             sl_tools::slTime2Ros(zed.getTimestamp(sl::TIME_REFERENCE_CURRENT));
+        ros::Time last_sm_t =
+            sl_tools::slTime2Ros(zed.getTimestamp(sl::TIME_REFERENCE_CURRENT));
         imuTime = old_t;
 
         sl::ERROR_CODE grab_status;
@@ -1660,7 +1666,8 @@ namespace zed_wrapper {
                     }
 
                     // Publish Pose message
-                    publishPose(odomToMapTransform, t);
+//                    publishPose(odomToMapTransform, t);
+                    publishPose(base_to_map_transform, t);
                 }
 
                 // Publish pose tf only if enabled

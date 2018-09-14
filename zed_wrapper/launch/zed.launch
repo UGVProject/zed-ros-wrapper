@@ -17,20 +17,23 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 -->
 <launch>
-    <arg name="svo_file"              default="" /> <!-- <arg name="svo_file" default="path/to/svo/file.svo"> -->
+    <param name="use_sim_time"          value="false" />
+    <arg name="svo_file"              default="/home/hd/dataset/4_720_2358_15_outside.svo" /> <!-- <arg name="svo_file" default="path/to/svo/file.svo"> -->
+    <!--<arg name="svo_file"              default="" /> &lt;!&ndash; <arg name="svo_file" default="path/to/svo/file.svo"> &ndash;&gt;-->
 
-    <arg name="camera_model"         default="1" /> <!-- 0=ZED, 1=ZEDM-->
+    <arg name="camera_model"         default="0" /> <!-- 0=ZED, 1=ZEDM-->
     <arg name="serial_number"        default="0" />
     <arg name="verbose"              default="true" />
     <arg name="resolution"           default="2" /> <!--0=RESOLUTION_HD2K, 1=RESOLUTION_HD1080, 2=RESOLUTION_HD720, 3=RESOLUTION_VGA -->
-    <arg name="frame_rate"           default="30" />
+    <arg name="frame_rate"           default="15" />
     <!-- RESOLUTION_HD2K   -> 2208*1242, available framerates: 15 fps.
          RESOLUTION_HD1080 -> 1920*1080, available framerates: 15, 30 fps.
          RESOLUTION_HD720  -> 1280*720,  available framerates: 15, 30, 60 fps.
          RESOLUTION_VGA    -> 672*376,   available framerates: 15, 30, 60, 100 fps. -->
 
     <!-- Coordinate frame -->
-    <arg name="pose_frame"           default="map" />
+    <!--<arg name="pose_frame"           default="map" />-->
+    <arg name="cam_pose_frame"       default="cam/pose" />
     <arg name="odometry_frame"       default="odom" />
 
     <group ns="zed">
@@ -45,4 +48,24 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
             <arg name="verbose"             default="$(arg verbose)" />
         </include>
     </group>
+
+    <!--<node pkg="ros_utils" type="pose_stamp_to_path" name="gps_path">-->
+        <!--<remap from="pose" to="/zed/map" />-->
+        <!--<remap from="path" to="/zed/path" />-->
+    <!--</node>-->
+
+    <!--<node pkg="rosbag" type="record" name="zed_record_cam" required="true" output="screen"-->
+          <!--args="-o $(env HOME)/zed /zed/left/image_raw_color /zed/right/image_raw_color-->
+          <!--/zed/left/image_rect_color /zed/right/image_rect_color-->
+          <!--/zed/left/camera_info_raw-->
+          <!--/zed/right/camera_info_raw-->
+          <!--/zed/left/camera_info-->
+    <!--/zed/right/camera_info" />-->
+
+    <node pkg="hector_trajectory_server" type="hector_trajectory_server" name="trajectory_server_for_gt" output="screen" >
+    <param name="/target_frame_name" value="map" />
+    <param name="/source_frame_name" value="zed_camera_center" />
+    <param name="/trajectory_update_rate" value="20.0" />
+    <param name="/trajectory_publish_rate" value="20.0" />
+    </node>
 </launch>
